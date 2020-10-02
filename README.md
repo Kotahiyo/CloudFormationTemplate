@@ -1,0 +1,2 @@
+# CloudFormationTemplate
+AWSのCloudFormation(YAML)を作成するプロジェクトです。 Ansibleとの連携をする為の事前処理でも使います。
