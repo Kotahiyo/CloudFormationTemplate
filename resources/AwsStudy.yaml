@@ -1,0 +1,285 @@
+# AWSテンプレートのバージョン。存在する唯一のバージョンが下記なので実質固定。
+AWSTemplateFormatVersion: '2010-09-09'
+# テンプレートの説明。実行時に表示されるので記載すべき。
+Description: AWS-Study Template
+# リソース定義。
+Resources:
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      # VPC の CIDR ブロック設定　文字列で入力
+      CidrBlock: 10.2.0.0/16
+
+      # DNS ホスト名を取得するかどうか
+      EnableDnsHostnames: true
+
+      # DNS ホスト名に変換するサポートはいるか
+      EnableDnsSupport: true
+      # タグ付け
+      Tags:
+        - Key: Name
+          Value: aws-study-vpc
+
+  # Subnet
+  SubnetAZ1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      # アベイラビリティゾーン設定。指定しなければ自動割り振り
+      AvailabilityZone: ap-northeast-1a
+
+      # Subnet の CIDR ブロック
+      CidrBlock: 10.2.0.0/24
+
+      # このサブネットが所属している VPC の ID を指定。
+      # Ref 関数で指定したパラメータの値を返している。 !Ref は短縮系の書き方。VPC = Resources 下の VPC。
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: aws-study-subnetaz1a
+
+  # Subnet 2つ目
+  SubnetAZ1c:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.2.1.0/24
+      VpcId: !Ref VPC
+      AvailabilityZone: ap-northeast-1c
+      Tags:
+        - Key: Name
+          Value: aws-study-subnetaz1c
+
+  # InternetGateWay  VPC と サブネットの出入り口
+  InternetGateWay:
+    Type: AWS::EC2::InternetGateway
+    # タグの指定くらい。タグの指定自体も必須じゃない。
+    Properties:
+      Tags:
+        - Key: Name
+          Value: aws-study-gw
+
+  # VPCGatewayAttachment
+  # VPC と作成した GateWay を繋ぐもの。下記で どこ と どこ を繋ぐのか設定している
+  GateWayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateWay
+      VpcId: !Ref VPC
+
+  # RouteTable サブネットと関連付けるためのテーブル。
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: aws-study-route
+      VpcId: !Ref VPC
+
+  # VPC 内のルートテーブルにルートを指定する。
+  RouteInternet:
+    Type: AWS::EC2::Route
+    Properties:
+      # ルーティング先の照合に使用する IPv4 CIDR ブロック。 下記は誰でも入れる状態
+      DestinationCidrBlock: 0.0.0.0/0
+      # VPC にアタッチされている InternetGateWay
+      GatewayId: !Ref InternetGateWay
+      # ルートテーブルの ID。必須。
+      RouteTableId: !Ref RouteTable
+
+  # サブネットをルートテーブルに関連付け。
+  RouteLocal:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetAZ1a
+
+  # SecurityGroup セキュリティグループの設定
+  SecurityGroupEC2:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      # このセキュリティグループの説明。必須。
+      GroupDescription: AWS Study EC2
+      VpcId: !Ref VPC
+      # インバウンド（受信）ルール
+      SecurityGroupIngress:
+        # 通信規約の指定 tcp
+        - IpProtocol: tcp
+          # 80 番 port について全部通してOKという指示
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          # 22 番 port について全部通してOKという指示
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          # 3000 番 port について全部通してOKという指示
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0
+      # アウトバウンド（送信）ルール
+      SecurityGroupEgress:
+        # -1 で全部のプロトコルを指定している
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: aws-study-SecurityGroup-ec2
+
+  SecurityGroupRDS:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: AWS Study RDS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          # SecurityGroupEC2 と関連付け
+          SourceSecurityGroupId: !Ref SecurityGroupEC2
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: aws-study-securityGroup-rds
+
+
+  # # EIP 今回は使用していない
+  # ElasticIPAssociate:
+  #   Type: AWS::EC2::EIPAssociation
+  #   Properties:
+  #     EIP: 13.112.139.96
+  #     InstanceId: !Ref EC2
+
+  EC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      # AMI の ID 指定
+      ImageId: ami-0e877e3e1cc848c03
+      # インスタンスタイプ指定
+      InstanceType: t2.micro
+      # サブネット指定
+      SubnetId: !Ref SubnetAZ1a
+      # true にすると EC2 コンソールを使用してインスタンスの終了ができなくなる。
+      DisableApiTermination: false
+      # シャットダウンにしたときに、インスタンスを停止するか終了するか。設定は停止。
+      InstanceInitiatedShutdownBehavior: stop
+      KeyName: kouhei
+      # 詳細なモニタリングを有効にするか
+      Monitoring: false
+      # セキュリティグループの ID を指定
+      SecurityGroupIds:
+        - !Ref SecurityGroupEC2
+      Tags:
+        - Key: Name
+          Value: aws-study-ec2
+  # RDS
+  RDS:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      # DB のストレージ初期容量設定(ギガバイト単位)
+      AllocatedStorage: 20
+      # メジャーバージョンアップグレードの拒否
+      AllowMajorVersionUpgrade: false
+      # マイナーバージョンアップグレードの許可
+      AutoMinorVersionUpgrade: true
+      # 使用する DB のインスタンス
+      DBInstanceClass: db.t2.micro
+      Port: 3306
+      # gp2 = 汎用 SSD
+      StorageType: gp2
+      # 自動バックアップを保管する日数を1日に指定
+      BackupRetentionPeriod: 1
+      # DB のマスターユーザー設定
+      MasterUsername: root
+      MasterUserPassword: rootroot
+      # 自動バックアップの時間指定
+      PreferredBackupWindow: 15:00-16:00
+      # 週一回のメンテナンス時間指定
+      PreferredMaintenanceWindow: sun:18:00-sun:19:00
+      DBName: TimeLine
+      Engine: mysql
+      EngineVersion: 8.0.13
+      # ライセンスモデル
+      LicenseModel: general-public-license
+      # DB のサブネットグループ
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      # セキュリティグループ指定
+      VPCSecurityGroups:
+        - !Ref SecurityGroupRDS
+      Tags:
+        - Key: Name
+          Value: aws-study-rds
+
+  # サブネット指定
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Created from the RDS Management Console
+      SubnetIds:
+        - !Ref SubnetAZ1a
+        - !Ref SubnetAZ1c
+
+  ELB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: aws-study-elb
+      SecurityGroups:
+        - !Ref SecurityGroupEC2
+      # サブネット
+      Subnets:
+        - !Ref SubnetAZ1a
+        - !Ref SubnetAZ1c
+      Tags:
+        - Key: Name
+          Value: aws-study-elb
+
+  # ターゲットグループの指定
+  ELBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: aws-study-elb-target-group
+      # 80 番ポートでトラフィック（データ）を受け入れるよ。
+      Port: 80
+      # プロトコルは HTTP で。
+      Protocol: HTTP
+      # この ELB の場所を指定。
+      VpcId: !Ref VPC
+      # 非正常なインスタンスを正常と判断する連続成功回数。2回は最小値。
+      HealthyThresholdCount: 2
+      # 非正常なインスタンスを異常と判断する連続失敗回数。2回はデフォルト。
+      UnhealthyThresholdCount: 2
+      # ターゲットから指定した時間反応がない場合、失敗とみなす。
+      HealthCheckTimeoutSeconds: 5
+      # ヘルスチェック時に使用するプロトコル
+      HealthCheckProtocol: HTTP
+      # ヘルスチェック時に使用するパス
+      HealthCheckPath: "/"
+      # ヘルスチェック時に使用するポート
+      HealthCheckPort: "traffic-port"
+      # 設定時間ごとにヘルスチェックのリクエストを送る。
+      HealthCheckIntervalSeconds: 10
+      # 正常なレスポンスを確認する HTTP コード
+      Matcher:
+        HttpCode: 200
+      Tags:
+        - Key: Name
+          Value: aws-study-elb-target-group
+      # 以下をターゲットに指定
+      Targets:
+        - Id: !Ref EC2
+          Port: 80
+  # リスナー = ロードバランサーの中で、ターゲットグループにトラフィックの仕分けを行なっている。
+  ELBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      # ロードバランサーの指定
+      LoadBalancerArn: !Ref ELB
+      # ターゲットグループの指定
+      DefaultActions:
+        - TargetGroupArn: !Ref ELBTargetGroup
+          Type: forward
+      Port: 80
+      Protocol: HTTP
