@@ -146,18 +146,20 @@ Resources:
           Value: aws-study-securityGroup-rds
 
 
-  # # EIP 今回は使用していない
-  # ElasticIPAssociate:
-  #   Type: AWS::EC2::EIPAssociation
-  #   Properties:
-  #     EIP: 13.112.139.96
-  #     InstanceId: !Ref EC2
+
+  ElasticIPAssociate:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      # EC2 にパブリック IP アドレスの付与。
+      EIP: 18.179.192.47
+      InstanceId: !Ref EC2
+
 
   EC2:
     Type: AWS::EC2::Instance
     Properties:
       # AMI の ID 指定
-      ImageId: ami-0e877e3e1cc848c03
+      ImageId: ami-0f4c5db25b18ba70d
       # インスタンスタイプ指定
       InstanceType: t2.micro
       # サブネット指定
@@ -166,7 +168,7 @@ Resources:
       DisableApiTermination: false
       # シャットダウンにしたときに、インスタンスを停止するか終了するか。設定は停止。
       InstanceInitiatedShutdownBehavior: stop
-      KeyName: kouhei
+      KeyName: iam-wonderful-code
       # 詳細なモニタリングを有効にするか
       Monitoring: false
       # セキュリティグループの ID を指定
